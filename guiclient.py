@@ -8,18 +8,45 @@ in_message_queue = Queue()
 out_message_queue = Queue()
 
 buffer = []
+# TODO placeholder for something else
+auth_string = 'teq:teq'
 
+# init screen
 stdscr = curses.initscr()
-display_window = curses.newwin(5, self.scr_height - 1, 5, 10)
-scr_height, width = self.scr.getmaxyx()
+w_height, w_width = stdscr.getmaxyx()
 
-def print_bot():
-    x = 2
-    while x < 118:
-        stdscr.addstr(27, x, '-')
-        stdscr.addstr(29, x, '-')
-        x += 1
-    stdscr.addstr(28, 2, '[0] ')
+# init colors
+curses.start_color()
+curses.use_default_colors()
+curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
+curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_BLACK)
+curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)
+
+# header window
+header = curses.newwin(1, 40, 0, 1)
+header.addstr(0, 1, 'chat client by teQ')
+header.refresh()
+
+# channel window
+channel_window = curses.newwin(w_height - 4, w_width - 15, 1, 0)
+channel_window.border()
+channel_window.refresh()
+
+# users window
+users_window = curses.newwin(0, 15, 1, w_width - 15)
+users_window.border()
+users_window.refresh()
+
+# input text window
+text_window = curses.newwin(3, w_width - 15, w_height - 3, 0)
+
+
+def refresh_input():
+    h, w = text_window.getmaxyx()
+    text_window.clear()
+    text_window.addstr(h - 2, w - w + 2, '>')
+    text_window.refresh()
 
 
 def socket_thread(ip, port):
@@ -48,7 +75,7 @@ def connect_socket(ip, port, buffer_size=1024):
                 auth = 1
         s.send(b'ping\n')
         # send data
-        text = message_queue.get()
+        text = in_message_queue.get()
         if text:
             s.send(str.encode(text) + b"\n")
 
@@ -70,39 +97,39 @@ def parse_commands(cmds):
 
 
 def pop_display():
-    start_pos = 26
+    h, w = channel_window.getmaxyx()
     while True:
         if not in_message_queue.empty():
 
             buffer.append(in_message_queue.get())
-
             messages = buffer
             messages.reverse()
-            counter = 0
-            stdscr.erase()
+            counter = 1
             for message in messages:
                 counter += 1
-                stdscr.addstr(start_pos - counter, 2, message)
+                channel_window.addstr(h - counter,  1, message)
                 if counter == 20:
                     break
-            print_bot()
-            stdscr.refresh()
+            channel_window.refresh()
 
 
-if __name__ == "__main__":
-    print_bot()
-    socket_thread('127.0.0.1', 5000)
-    display_thread()
-
+def get_input():
     while True:
+        h, w = text_window.getmaxyx()
         try:
-            key = stdscr.getch()
-            if key == 10 or key == 13:
-                print("KEY", key)
-                new_msg = stdscr.getstr(28, 6, 90)
-                parse_commands(str(new_msg))
-                print_bot()
-
+            text_window.addstr(h - 2, w - w + 1, '>')
+            text_window.border()
+            text_window.refresh()
+            new_msg = text_window.getstr(h - 2, w - w + 3, 90)
+            parse_commands(str(new_msg))
+            print("got string:", new_msg)
+            text_window.erase()
         except KeyboardInterrupt:
             print('Bye.')
             exit(1)
+
+
+if __name__ == "__main__":
+    socket_thread('127.0.0.1', 5000)
+    display_thread()
+    get_input()
