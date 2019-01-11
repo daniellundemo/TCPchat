@@ -4,20 +4,32 @@ import socket
 import time
 from queue import Queue
 
-message_queue = Queue()
+in_message_queue = Queue()
+out_message_queue = Queue()
 
-def my_input(stdscr):
-    curses.echo()
-    stdscr.addstr(27, 2, '--------------------------------------------------------------------------------------------')
-    stdscr.addstr(28, 2, '[0]')
-    stdscr.addstr(29, 2, '--------------------------------------------------------------------------------------------')
-    stdscr.refresh()
-    input = stdscr.getstr(28, 6, 18)
-    return input  #
+buffer = []
+
+stdscr = curses.initscr()
+display_window = curses.newwin(5, self.scr_height - 1, 5, 10)
+scr_height, width = self.scr.getmaxyx()
+
+def print_bot():
+    x = 2
+    while x < 118:
+        stdscr.addstr(27, x, '-')
+        stdscr.addstr(29, x, '-')
+        x += 1
+    stdscr.addstr(28, 2, '[0] ')
 
 
-def start_thread(ip, port):
+def socket_thread(ip, port):
     t = Thread(target=connect_socket, args=(ip, port))
+    t.setDaemon(True)
+    t.start()
+
+
+def display_thread():
+    t = Thread(target=pop_display)
     t.setDaemon(True)
     t.start()
 
@@ -42,31 +54,55 @@ def connect_socket(ip, port, buffer_size=1024):
 
         # receieve data
         data = s.recv(buffer_size)
-        print("received data:", data)
+        in_message_queue.put(data)
         time.sleep(1)
 
 
 def parse_commands(cmds):
-    stdscr.refresh()
     if not '/' in cmds:
-        cmds = '[msg]' + cmds
+        cmds = '[msg]°' + cmds
     if '[msg]' in cmds:
-        message_queue.put(cmds)
+        s = cmds.split("°")[1]
+        out_message_queue.put(s)
     if '/quit' in cmds:
         print('Bye.')
         exit(1)
 
 
+def pop_display():
+    start_pos = 26
+    while True:
+        if not in_message_queue.empty():
+
+            buffer.append(in_message_queue.get())
+
+            messages = buffer
+            messages.reverse()
+            counter = 0
+            stdscr.erase()
+            for message in messages:
+                counter += 1
+                stdscr.addstr(start_pos - counter, 2, message)
+                if counter == 20:
+                    break
+            print_bot()
+            stdscr.refresh()
+
+
 if __name__ == "__main__":
-    start_thread('127.0.0.1', 5000)
-    stdscr = curses.initscr()
-    display_list = []
+    print_bot()
+    socket_thread('127.0.0.1', 5000)
+    display_thread()
+
     while True:
         try:
-            stdscr.clear()
-            parse_commands(str(my_input(stdscr)))
-            pop_display()
-            stdscr.getch()
+            key = stdscr.getch()
+            if key == 10 or key == 13:
+                print("KEY", key)
+                new_msg = stdscr.getstr(28, 6, 90)
+                parse_commands(str(new_msg))
+                print_bot()
+
         except KeyboardInterrupt:
             print('Bye.')
             exit(1)
