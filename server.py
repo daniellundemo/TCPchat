@@ -22,21 +22,20 @@ def socket_in(ip='127.0.0.1', port=5000, buffer_size=1024):
         t.start()
 
 
-def socket_out(ip='127.0.0.1', port=5001, buffer_size=1024):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((ip, port))
-    s.listen(1)
-    while True:
-        conn, addr = s.accept()
-        t = Thread(target=out_thread, args=(s, conn, addr))
-        t.setDaemon(True)
-        t.start()
+# def socket_out(ip='127.0.0.1', port=5001, buffer_size=1024):
+#     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#     s.bind((ip, port))
+#     s.listen(1)
+#     while True:
+#         conn, addr = s.accept()
+#         t = Thread(target=out_thread, args=(s, conn, addr))
+#         t.setDaemon(True)
+#         t.start()
 
 
 def in_thread(conn, addr, id, counter=0, auth=0):
+    print("Started thread {} with {} {}".format(id, conn, addr))
     while 1:
-        print("Started thread {} with {} {}".format(id, conn, addr))
-
         # challenge password
         while auth == 0:
             conn.send(b'[out] ping')
@@ -74,10 +73,10 @@ def in_thread(conn, addr, id, counter=0, auth=0):
     conn.close()
 
 
-def out_thread(conn, addr):
-    while 1:
-        conn.send(b'[out] pong')
-        time.sleep(1)
+# def out_thread(conn, addr):
+#     while 1:
+#         conn.send(b'[out] pong')
+#         time.sleep(1)
 
 
 def challenge(string):
@@ -94,11 +93,16 @@ def main():
     t.setDaemon(True)
     t.start()
 
-    t = Thread(target=socket_out)
-    t.setDaemon(True)
-    t.start()
+    # t = Thread(target=socket_out)
+    # t.setDaemon(True)
+    # t.start()
 
     while True:
-        time.sleep(1)
+        try:
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print('Bye.')
+            exit(1)
+
 
 main()
