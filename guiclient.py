@@ -7,9 +7,10 @@ from queue import Queue
 in_message_queue = Queue()
 out_message_queue = Queue()
 
+users = []
 buffer = []
 # TODO placeholder for something else
-auth_string = 'teq:teq'
+auth_string = 'auth=teq:teq'
 
 # init screen
 stdscr = curses.initscr()
@@ -18,7 +19,7 @@ w_height, w_width = stdscr.getmaxyx()
 # init colors
 curses.start_color()
 curses.use_default_colors()
-curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLACK)
 curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
 curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_BLACK)
 curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)
@@ -45,7 +46,8 @@ text_window = curses.newwin(3, w_width - 15, w_height - 3, 0)
 def refresh_input():
     h, w = text_window.getmaxyx()
     text_window.clear()
-    text_window.addstr(h - 2, w - w + 2, '>')
+    text_window.border()
+    text_window.addstr(h - 2, w - w + 2, '> ')
     text_window.refresh()
 
 
@@ -67,15 +69,13 @@ def connect_socket(ip, port, buffer_size=1024):
     auth = 0
     while True:
         while auth == 0:
-            s.send(b'auth=teq:teq\n')
-            s.send(b'ping\n')
+            s.send(str.encode(auth_string))
             data = s.recv(buffer_size)
-            print("received data:", data)
+            in_message_queue.put(data)
             if 'OK_CHALLENGE' in data.decode('utf-8'):
                 auth = 1
-        s.send(b'ping\n')
         # send data
-        text = in_message_queue.get()
+        text = out_message_queue.get()
         if text:
             s.send(str.encode(text) + b"\n")
 
@@ -106,24 +106,28 @@ def pop_display():
             messages.reverse()
             counter = 1
             for message in messages:
+                m = str(message)
                 counter += 1
-                channel_window.addstr(h - counter,  1, message)
-                if counter == 20:
+                if '[SERVER]' in m:
+                    channel_window.addstr(h - counter, 1, m, curses.color_pair(1))
+                else:
+                    channel_window.addstr(h - counter, 1, m)
+                if counter > 20:
                     break
+            channel_window.border()
             channel_window.refresh()
+            refresh_input()
 
 
 def get_input():
     while True:
         h, w = text_window.getmaxyx()
         try:
-            text_window.addstr(h - 2, w - w + 1, '>')
-            text_window.border()
-            text_window.refresh()
+            refresh_input()
             new_msg = text_window.getstr(h - 2, w - w + 3, 90)
             parse_commands(str(new_msg))
-            print("got string:", new_msg)
             text_window.erase()
+
         except KeyboardInterrupt:
             print('Bye.')
             exit(1)
