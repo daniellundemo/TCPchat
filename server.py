@@ -5,13 +5,15 @@ import time
 from threading import Thread
 from queue import Queue
 
-message_queue = Queue()
+out_message_queue = Queue()
+in_message_queue = Queue()
 connections_queue = Queue()
+
 database = ['teq:teq']
 debug = True
 
 
-def socket_thread(ip='127.0.0.1', port=5000, thread_id=0):
+def socket_thread(ip, port, thread_id=0):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((ip, port))
     sock.listen(1)
@@ -31,19 +33,41 @@ def send_message(connection, message):
     connection.send(str.encode(message))
 
 
-def update_clients():
-    while True:
-        if not message_queue.empty():
-            queue = connections_queue
-            message = message_queue.get()
-            while not queue.empty():
-                conn = queue.get()
-                t = Thread(target=send_message, args=(conn, message))
-                t.setDaemon(True)
-                t.start()
-        time.sleep(1)
+def send_data():
+    if not out_message_queue.empty():
+        queue = connections_queue
+        message = out_message_queue.get()
+        while not queue.empty():
+            conn = queue.get()
+            t = Thread(target=send_message, args=(conn, message))
+            t.setDaemon(True)
+            t.start()
 
 
+def receive_data(conn):
+    t = Thread(target=receive_thread, args=(conn,))
+    t.setDaemon(True)
+    t.start()
+    
+    
+def receive_thread(conn):
+    try:
+        if debug:
+            print("[DEBUG] - [Thread id {}] - Waiting for response".format(id))
+        data = conn.recv(1024)
+        if debug:
+            print("[DEBUG] - [Thread id {}] - Got response response: {}".format(id, str(data)))
+        if '[msg]' in str(data):
+            out_message_queue.put(str(data))
+        else:
+            conn.send(b'[SERVER]: Could not understand message')
+    except (ConnectionResetError, OSError):
+        print("[DEBUG] - [Thread id {}] - Closing connection".format(id))
+        connections_queue.get(conn)
+        conn.close()
+        return 1
+ 
+    
 def connection_thread(conn, addr, id):
     if debug:
         print("[DEBUG] - [Thread id {}] - New connection from {}".format(id, addr))
@@ -52,23 +76,9 @@ def connection_thread(conn, addr, id):
         conn.close()
         return False
     else:
+        # TODO: make a different challenging scheme
         conn.send(b'OK_CHALLENGE\n')
-    while 1:
-        try:
-            if debug:
-                print("[DEBUG] - [Thread id {}] - Waiting for response".format(id))
-            data = conn.recv(1024)
-            if debug:
-                print("[DEBUG] - [Thread id {}] - Got response response: {}".format(id, str(data)))
-            if '[msg]' in str(data):
-                message_queue.put(str(data))
-            else:
-                conn.send(b'[SERVER]: Could not understand message')
-        except (ConnectionResetError, OSError):
-            print("[DEBUG] - [Thread id {}] - Closing connection".format(id))
-            connections_queue.get(conn)
-            conn.close()
-            return 1
+        receive_data(conn)  # Create receiver thread for this connection
 
 
 def challenge_user(conn, counter=0):
@@ -97,16 +107,14 @@ def challenge_user(conn, counter=0):
 
 
 def main():
-    t = Thread(target=socket_thread)
-    t.setDaemon(True)
-    t.start()
-
-    t = Thread(target=update_clients)
+    # bind to IP and port, spawn thread for each connection
+    t = Thread(target=socket_thread, args=('127.0.0.1', 5000))
     t.setDaemon(True)
     t.start()
 
     while True:
         try:
+            send_data()  # Iterate out_message_queue, and update clients if necessary
             time.sleep(1)
         except KeyboardInterrupt:
             print('Bye.')
