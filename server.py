@@ -5,41 +5,43 @@ import time
 from threading import Thread
 from queue import Queue
 
-message_queue = Queue(maxsize=200000)
-connections_queue = Queue(maxsize=10000)
+message_queue = Queue()
+connections_queue = Queue()
 database = ['teq:teq']
 debug = True
 
 
-def socket_thread(ip='127.0.0.1', port=5000):
+def socket_thread(ip='127.0.0.1', port=5000, thread_id=0):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((ip, port))
     sock.listen(1)
-    id = 0
     while True:
-        id += 1
+        thread_id += 1
         conn, addr = sock.accept()
         connections_queue.put(conn)
         if debug:
             print("[DEBUG] - There are {} connections".format(connections_queue.qsize()))
-        t = Thread(target=connection_thread, args=(conn, addr, id))
+        t = Thread(target=connection_thread, args=(conn, addr, thread_id))
         t.setDaemon(True)
         t.start()
 
 
 def send_message(connection, message):
-    connection.send(message)
+    print("[DEBUG] - Sending to:", connection)
+    connection.send(str.encode(message))
 
 
 def update_clients():
     while True:
         if not message_queue.empty():
             queue = connections_queue
-            conn = queue.get()
-            for message in message_queue.get():
+            message = message_queue.get()
+            while not queue.empty():
+                conn = queue.get()
                 t = Thread(target=send_message, args=(conn, message))
                 t.setDaemon(True)
                 t.start()
+        time.sleep(1)
 
 
 def connection_thread(conn, addr, id):
@@ -49,8 +51,8 @@ def connection_thread(conn, addr, id):
     if not challenge_user(conn):
         conn.close()
         return False
-    if debug:
-        print("[DEBUG] - User challenged OK")
+    else:
+        conn.send(b'OK_CHALLENGE\n')
     while 1:
         try:
             if debug:
@@ -58,8 +60,8 @@ def connection_thread(conn, addr, id):
             data = conn.recv(1024)
             if debug:
                 print("[DEBUG] - [Thread id {}] - Got response response: {}".format(id, str(data)))
-            if '[msg]' in data:
-                message_queue.put(data)
+            if '[msg]' in str(data):
+                message_queue.put(str(data))
             else:
                 conn.send(b'[SERVER]: Could not understand message')
         except (ConnectionResetError, OSError):

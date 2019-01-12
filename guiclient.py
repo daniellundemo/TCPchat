@@ -51,8 +51,14 @@ def refresh_input():
     text_window.refresh()
 
 
-def socket_thread(ip, port):
-    t = Thread(target=connect_socket, args=(ip, port))
+def send_socket(ip, port):
+    t = Thread(target=send_connection, args=(ip, port))
+    t.setDaemon(True)
+    t.start()
+
+
+def fetch_socket(ip, port):
+    t = Thread(target=fetch_connection, args=(ip, port))
     t.setDaemon(True)
     t.start()
 
@@ -63,7 +69,7 @@ def display_thread():
     t.start()
 
 
-def connect_socket(ip, port, buffer_size=1024):
+def send_connection(ip, port, buffer_size=1024):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((ip, port))
     auth = 0
@@ -71,14 +77,27 @@ def connect_socket(ip, port, buffer_size=1024):
         while auth == 0:
             s.send(str.encode(auth_string))
             data = s.recv(buffer_size)
-            in_message_queue.put(data)
+            if 'OK_CHALLENGE' in str(data):
+                auth = 1
+                print("Authenticated Sender")
+        # send data
+        msg = out_message_queue.get()
+        if msg:
+            s.send(msg + b"\n")
+        time.sleep(1)
+
+
+def fetch_connection(ip, port, buffer_size=1024):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((ip, port))
+    auth = 0
+    while True:
+        while auth == 0:
+            s.send(str.encode(auth_string))
+            data = s.recv(buffer_size)
             if 'OK_CHALLENGE' in data.decode('utf-8'):
                 auth = 1
-        # send data
-        text = out_message_queue.get()
-        if text:
-            s.send(str.encode(text) + b"\n")
-
+                print("Authenticated fetcher")
         # receieve data
         data = s.recv(buffer_size)
         in_message_queue.put(data)
@@ -86,12 +105,12 @@ def connect_socket(ip, port, buffer_size=1024):
 
 
 def parse_commands(cmds):
-    if not '/' in cmds:
-        cmds = '[msg]°' + cmds
-    if '[msg]' in cmds:
-        s = cmds.split("°")[1]
-        out_message_queue.put(s)
-    if '/quit' in cmds:
+
+    if '/' not in str(cmds):
+        message = b"[msg]=" + cmds
+        out_message_queue.put(message)
+        print("out_message_queue: {}".format(out_message_queue.qsize()))
+    if '/quit' in str(cmds):
         print('Bye.')
         exit(1)
 
@@ -99,6 +118,8 @@ def parse_commands(cmds):
 def pop_display():
     h, w = channel_window.getmaxyx()
     while True:
+        time.sleep(1)
+        print("in_message_queue: {}".format(in_message_queue.qsize()))
         if not in_message_queue.empty():
 
             buffer.append(in_message_queue.get())
@@ -125,7 +146,7 @@ def get_input():
         try:
             refresh_input()
             new_msg = text_window.getstr(h - 2, w - w + 3, 90)
-            parse_commands(str(new_msg))
+            parse_commands(new_msg)
             text_window.erase()
 
         except KeyboardInterrupt:
@@ -134,6 +155,8 @@ def get_input():
 
 
 if __name__ == "__main__":
-    socket_thread('127.0.0.1', 5000)
+    send_socket('127.0.0.1', 5000)
+    fetch_socket('127.0.0.1', 5000)
     display_thread()
+    
     get_input()
