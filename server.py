@@ -6,8 +6,8 @@ from threading import Thread
 from queue import Queue
 
 out_message_queue = Queue()
-in_message_queue = Queue()
 connections_queue = Queue()
+sent_queue = Queue()
 
 database = ['teq:teq']
 debug = True
@@ -18,11 +18,9 @@ def socket_thread(ip, port, thread_id=0):
     sock.bind((ip, port))
     sock.listen(1)
     while True:
-        thread_id += 1
+        thread_id = connections_queue.qsize()
         conn, addr = sock.accept()
         connections_queue.put(conn)
-        if debug:
-            print("[DEBUG] - There are {} connections".format(connections_queue.qsize()))
         t = Thread(target=connection_thread, args=(conn, addr, thread_id))
         t.setDaemon(True)
         t.start()
@@ -34,43 +32,37 @@ def send_message(connection, message):
 
 
 def send_data():
-    if not out_message_queue.empty():
-        queue = connections_queue
+
+    while not out_message_queue.empty():
         message = out_message_queue.get()
-        while not queue.empty():
-            conn = queue.get()
+        while not connections_queue.empty():
+            conn = connections_queue.get()
+            # TODO: better way of iterating all connections
+            sent_queue.put(conn)
             t = Thread(target=send_message, args=(conn, message))
             t.setDaemon(True)
             t.start()
+        while not sent_queue.empty():
+            connections_queue.put(sent_queue.get())
 
 
-def receive_data(conn):
-    t = Thread(target=receive_thread, args=(conn,))
-    t.setDaemon(True)
-    t.start()
-    
-    
-def receive_thread(conn):
-    try:
-        if debug:
-            print("[DEBUG] - [Thread id {}] - Waiting for response".format(id))
-        data = conn.recv(1024)
-        if debug:
-            print("[DEBUG] - [Thread id {}] - Got response response: {}".format(id, str(data)))
-        if '[msg]' in str(data):
-            out_message_queue.put(str(data))
-        else:
-            conn.send(b'[SERVER]: Could not understand message')
-    except (ConnectionResetError, OSError):
-        print("[DEBUG] - [Thread id {}] - Closing connection".format(id))
-        connections_queue.get(conn)
-        conn.close()
-        return 1
+def receive_data_thread(conn):
+    while True:
+        try:
+            data = conn.recv(1024)
+            if '[msg]' in str(data):
+                out_message_queue.put(str(data))
+            else:
+                conn.send(b'[SERVER]: Could not understand message')
+        except (ConnectionResetError, OSError):
+            connections_queue.get(conn)
+            conn.close()
+            return 1
  
     
 def connection_thread(conn, addr, id):
     if debug:
-        print("[DEBUG] - [Thread id {}] - New connection from {}".format(id, addr))
+        print("[DEBUG] - [Connection thread id {}] - New connection from {}".format(id, addr))
     # challenge user and password
     if not challenge_user(conn):
         conn.close()
@@ -78,7 +70,9 @@ def connection_thread(conn, addr, id):
     else:
         # TODO: make a different challenging scheme
         conn.send(b'OK_CHALLENGE\n')
-        receive_data(conn)  # Create receiver thread for this connection
+        t = Thread(target=receive_data_thread, args=(conn,))
+        t.setDaemon(True)
+        t.start()
 
 
 def challenge_user(conn, counter=0):
@@ -112,10 +106,18 @@ def main():
     t.setDaemon(True)
     t.start()
 
+    counter = 0
     while True:
         try:
+            counter += 1
             send_data()  # Iterate out_message_queue, and update clients if necessary
-            time.sleep(1)
+            time.sleep(0.1)
+
+            if counter == 50:
+                if debug:
+                    print("[DEBUG] - out_message_queue: {}".format(out_message_queue.qsize()))
+                    print("[DEBUG] - connections_queue: {}".format(connections_queue.qsize()))
+                counter = 0
         except KeyboardInterrupt:
             print('Bye.')
             exit(1)
