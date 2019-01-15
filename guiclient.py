@@ -47,7 +47,7 @@ def connect_socket(ip, port):
 def receive_data_thread(s, buffer_size=1024):
     while True:
         try:
-            data = s.recv(buffer_size)
+            data = s.recv(buffer_size)  # waits for buffer_size of data
             in_message_queue.put(data)
         except (ConnectionResetError, OSError):
             s.close()
