@@ -27,8 +27,8 @@ def socket_thread(ip, port, thread_id=0):
 
 
 def send_message(connection, message):
-    print("[DEBUG] - Sending to:", connection)
-    connection.send(str.encode(message))
+    print(f"[DEBUG] - Sending {message} to {connection}")
+    connection.send(message)
 
 
 def send_data():
@@ -51,7 +51,7 @@ def receive_data_thread(conn):
         try:
             data = conn.recv(1024)
             if '[msg]' in str(data):
-                out_message_queue.put(str(data))
+                out_message_queue.put(data)
             else:
                 conn.send(b'[SERVER]: Could not understand message')
         except (ConnectionResetError, OSError):
@@ -115,8 +115,8 @@ def main():
 
             if counter == 50:
                 if debug:
-                    print("[DEBUG] - out_message_queue: {}".format(out_message_queue.qsize()))
-                    print("[DEBUG] - connections_queue: {}".format(connections_queue.qsize()))
+                    print(f"[DEBUG] - out_message_queue: {out_message_queue.qsize()}")
+                    print(f"[DEBUG] - connections_queue: {connections_queue.qsize()}")
                 counter = 0
         except KeyboardInterrupt:
             print('Bye.')
