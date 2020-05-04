@@ -169,14 +169,14 @@ class ChatServer:
                 # if it passed validation put on incoming queue
                 self.insert_incoming_queue(connection, client_data['message_type'], message['operation'], message['content'])
             except (ValueError, KeyError, JSONDecodeError):
-                self.send_message_to_connection(connection, 'private', 'Server did not undestand your message',
+                self.send_message_to_connection(connection, 'private', 'Server did not understand your message',
                                                 'server_message')
             except (ConnectionResetError, OSError):
                 del self.clients_connected[connection]
                 exit(1)
             except socket.timeout:
                 try:
-                    logging.debug(f"User {self.clients_connected[connection]['username']} timed out. Removing")
+                    logging.debug(f"User {self.clients_connected[connection]['username']} timed out")
                 except KeyError:
                     pass
                 del self.clients_connected[connection]
